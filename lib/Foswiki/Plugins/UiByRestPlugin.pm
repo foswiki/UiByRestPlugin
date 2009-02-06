@@ -95,15 +95,14 @@ sub _showTemplate {
 =begin TML
 
 ---++ _renameTopic( $session )
-
-This is a wrapper substitute for the rename bin script. The main difference is,
-that this method sets proper status codes.
+This is a wrapper substitute for the rename bin script.
 
 It checks the prerequisites and sets the following status codes:
-403 : the user is not allowed to CHANGE the topic
+400 : url parameter(s) are missing
+400 : newtopic is not valid (non) wikiword
+403 : the user is not allowed to RENAME the topic
 404 : the source topic does not exist
-500 : url parameter(s) are missing
-500 : newtopic is not valid (non) wikiword
+409 : the target topic already exists
 
 newweb url parameter will be replaces with source webname.
 
@@ -130,7 +129,7 @@ sub _renameTopic {
     if (!$isSetTopic)           { push( @missing, "topic") };
     if (!defined($theNewTopic)) { push( @missing, "newtopic") };
     if ( scalar(@missing) > 0 ) {
-      $session->{response}->header( -status => "500 Missing parameter: ".join(",", @missing) );
+      $session->{response}->header( -status => "400 Missing parameter: ".join(",", @missing) );
       return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }
 
@@ -146,23 +145,25 @@ sub _renameTopic {
     # check permission
     if ( !Foswiki::Func::checkAccessPermission( "RENAME", $theUser, undef, $theTopic, $theWeb, undef ) ) {
       $session->{response}->header( -status => "403 Forbidden to rename this topic" );
-      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatenam );
+      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }
 
     # does the newtopic met the optional nonwikiword requirement?
     if ( !Foswiki::Func::isValidTopicName( $theNewTopic, Foswiki::isTrue( $query->param('nonwikiword') ) ) ) {
-      $session->{response}->header( -status => "500 Not valid: newtopic" );
+      $session->{response}->header( -status => "400 Not valid: newtopic" );
       return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }
 
     # does newtopic already exists?
     if ( Foswiki::Func::topicExists( $theWeb, $theNewTopic ) ) {
-      $session->{response}->header( -status => "500 Target topic already exists" );
-      return _showTemplate( $theTopic, $theWeb, $theSkin );
+      $session->{response}->header( -status => "409 Conflict Target topic already exists" );
+      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }
 
-    # if everything is fine, we can do the actual renaming now
+    # since this is a topic rename, we hardcode the web here
     $query->param( "newweb", $theWeb );
+
+    # if everything is fine, we can do the actual renaming now
     Foswiki::UI::Manage::rename( $session );
 
     return "";
@@ -171,15 +172,14 @@ sub _renameTopic {
 =begin TML
 
 ---++ _moveTopic( $session )
-
-This is a wrapper substitute for the rename bin script. The main difference is,
-that this method sets proper status codes.
+This is a wrapper substitute for the rename bin script.
 
 It checks the prerequisites and sets the following status codes:
-403 : the user is not allowed to CHANGE the topic
+400 : url parameter(s) are missing
+400 : newtopic is not valid (non) wikiword
+403 : the user is not allowed to RENAME the topic
 404 : the source topic does not exist
-500 : url parameter(s) are missing
-500 : newtopic is not valid (non) wikiword
+409 : the target topic already exists
 
 Return:
 In case of an error, the movetopic template is returned.
@@ -222,22 +222,125 @@ sub _moveTopic {
     # check permission
     if ( !Foswiki::Func::checkAccessPermission( "RENAME", $theUser, undef, $theTopic, $theWeb, undef ) ) {
       $session->{response}->header( -status => "403 Forbidden to rename this topic" );
-      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatenam );
+      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }
 
     # does the newtopic met the optional nonwikiword requirement?
     if ( !Foswiki::Func::isValidTopicName( $theNewTopic, Foswiki::isTrue( $query->param('nonwikiword') ) ) ) {
-      $session->{response}->header( -status => "500 Not valid: newtopic" );
+      $session->{response}->header( -status => "400 Not valid: newtopic" );
       return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }
 
     # does newtopic already exists?
     if ( Foswiki::Func::topicExists( $theNewWeb, $theNewTopic ) ) {
-      $session->{response}->header( -status => "500 Target topic already exists" );
-      return _showTemplate( $theTopic, $theWeb, $theSkin );
+      $session->{response}->header( -status => "409 Conflict Target topic already exists" );
+      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }
 
     # if everything is fine, we can do the actual renaming now
+    Foswiki::UI::Manage::rename( $session );
+
+    return "";
+}
+
+=begin TML
+
+---++ _renameWeb( $session )
+%X% *Untested yet* %X%
+
+This is a wrapper substitute for the rename bin script.
+
+It checks the prerequisites and sets the following status codes:
+400 : url parameter(s) are missing
+400 : newparentweb or newsubweb is not a valid webname
+403 : the user is not allowed to CHANGE the topic
+404 : the old web does not exist
+409 : the newweb already exists
+
+Return:
+In case of an error, the renametopic template is returned.
+In case of no error, the Manage:rename() method is invoked,
+which will take further (url) parameters and may end in a redirect.
+
+=cut
+
+sub _renameWeb {
+    my $session         = shift;
+    my $query           = $session->{cgiQuery};
+    my $theTopic        = $session->{topicName}; # set by topic-url-param (rest handler)
+    my $theOldWeb       = $session->{webName};   # set by topic-url-param (rest handler)
+    my $theUser         = Foswiki::Func::getWikiName();
+    my $theSkin         = $query->param("skin")         || undef; # SMELL: should be sanatized
+    my $theNewSubWeb    = $query->param("newsubweb")    || undef; # SMELL: should be sanatized
+    my $theNewParentWeb = $query->param("newparentweb") || undef; # SMELL: should be sanatized
+    my $isSetTopic      = $query->param("topic")        || 0;
+    my $templatename    = "renameweb";
+
+    # check topic parameter first; if not set, the rest is irrelevant
+    my @missing = ();
+    if (!$isSetTopic)               { push( @missing, "topic") };
+    if (!defined($theNewSubWeb))    { push( @missing, "newsubweb") };
+    if (!defined($theNewParentWeb)) { push( @missing, "newparentweb") };
+    if ( scalar(@missing) > 0 ) {
+      $session->{response}->header( -status => "400 Missing parameter: ".join(",", @missing) );
+      return _showTemplate( $theTopic, $theOldWeb, $theSkin, $templatename );
+    }
+
+    # check if old web exists
+    if ( !Foswiki::Func::webExists( $theOldWeb ) ) {
+      $session->{response}->header( -status => "404 File not found" );
+      return _showTemplate( $theTopic, $theOldWeb, $theSkin, $templatename );
+    }
+
+    # is the newparentweb a valid webname?
+    if ( !Foswiki::Func::isValidWebName( $theNewParentWeb, 1 ) ) {
+      $session->{response}->header( -status => "400 Not valid: newparentweb" );
+      return _showTemplate( $theTopic, $theOldWeb, $theSkin, $templatename );
+    }
+
+    # is the newsubweb a valid webname?
+    if ( !Foswiki::Func::isValidWebName( $theNewSubWeb, 1 ) ) {
+      $session->{response}->header( -status => "400 Not valid: newnewsubweb" );
+      return _showTemplate( $theTopic, $theOldWeb, $theSkin, $templatename );
+    }
+
+    # calculate the new webname
+    my $newWeb;
+    if ($theNewSubWeb) {
+      if ($theNewParentWeb) {
+        $newWeb = $theNewParentWeb . '/' . $theNewSubWeb;
+      } else {
+        $newWeb = $theNewSubWeb;
+      }
+    }
+    my @tmp = split( /[\/\.]/, $theOldWeb );
+    pop(@tmp);
+    my $oldParentWeb = join( '/', @tmp );
+
+    # check if new web exists
+    if ( !Foswiki::Func::webExists( $newWeb ) ) {
+      $session->{response}->header( -status => "409 Conflict. New web already exists." );
+      return _showTemplate( $theTopic, $theOldWeb, $theSkin, $templatename );
+    }
+
+    # If the user is not allowed to rename anything in the parent web - stop here
+    # This also ensures we check root webs for ALLOWROOTRENAME and DENYROOTRENAME
+    if ( !Foswiki::Func::checkAccessPermission( 'RENAME', $theUser, undef, undef, $oldParentWeb || undef, undef ) ) {
+      $session->{response}->header( -status => "403 Forbidden to rename in old parent web" );
+      return _showTemplate( $theTopic, $theOldWeb, $theSkin, $templatename );
+    }
+
+    # If old web is a root web then also stop if ALLOW/DENYROOTCHANGE prevents access
+    if ( !$oldParentWeb && !Foswiki::Func::checkAccessPermission( 'CHANGE', $theUser, undef, undef, $oldParentWeb || undef, undef ) ) {
+      $session->{response}->header( -status => "403 Forbidden to change old root parent web" );
+      return _showTemplate( $theTopic, $theOldWeb, $theSkin, $templatename );
+    }
+
+    # prepare the action for rename
+    $query->param( "action", "renameweb" );
+
+    # if everything is fine, we can do the actual renaming now
+    use Foswiki::UI::Manage;
     Foswiki::UI::Manage::rename( $session );
 
     return "";
