@@ -12,7 +12,7 @@
 # GNU General Public License for more details, published at
 # http://www.gnu.org/copyleft/gpl.html
 #
-# Author: Eugen Mayer
+# Author: Eugen Mayer, Oliver Krueger
 
 # =========================
 package Foswiki::Plugins::UiByRestPlugin;
@@ -47,18 +47,198 @@ $pluginName = 'UiByRestPlugin';
 
 # =========================
 my $jqPluginName = "JQueryCompatibilityModePlugin";
+
 sub initPlugin {
     my ( $topic, $web, $user, $installWeb ) = @_;
-    Foswiki::Func::registerRESTHandler('renametopic', \&_renameTopic);
+
+    # 2-letter shortcuts for limited-url-length environments
+    Foswiki::Func::registerRESTHandler('topic_rename',      \&_renameTopic);
+    Foswiki::Func::registerRESTHandler('tr',                \&_renameTopic);
+    Foswiki::Func::registerRESTHandler('topic_move',        \&_moveTopic);
+    Foswiki::Func::registerRESTHandler('tm',                \&_moveTopic);
+    Foswiki::Func::registerRESTHandler('attachment_move',   \&_moveAttachment);
+    Foswiki::Func::registerRESTHandler('am',                \&_moveAttachment);
+    Foswiki::Func::registerRESTHandler('attachment_rename', \&_renameAttachment);
+    Foswiki::Func::registerRESTHandler('ar',                \&_renameAttachment);
+    Foswiki::Func::registerRESTHandler('revision_list',     \&_listRevisions);
+    Foswiki::Func::registerRESTHandler('rl',                \&_listRevisions);
+    Foswiki::Func::registerRESTHandler('revision_compare',  \&_compareRevisions);
+    Foswiki::Func::registerRESTHandler('rc',                \&_compareRevisions);
+    Foswiki::Func::registerRESTHandler('revision_restore',  \&_restoreRevision);
+    Foswiki::Func::registerRESTHandler('rs',                \&_restoreRevision);
+    Foswiki::Func::registerRESTHandler('parent_set',        \&_setParent);
+    Foswiki::Func::registerRESTHandler('pa',                \&_setParent);
+    Foswiki::Func::registerRESTHandler('preference_set',    \&_setPreference);
+    Foswiki::Func::registerRESTHandler('ps',                \&_setPreference);
+    Foswiki::Func::registerRESTHandler('preference_get',    \&_getPreference);
+    Foswiki::Func::registerRESTHandler('pg',                \&_getPreference);
+    Foswiki::Func::registerRESTHandler('child_get',         \&_getChildTopics);
+    Foswiki::Func::registerRESTHandler('cg',                \&_getChildTopics);
+    Foswiki::Func::registerRESTHandler('backlink_get',      \&_getBacklinks);
+    Foswiki::Func::registerRESTHandler('bg',                \&_getBacklinks);
+    Foswiki::Func::registerRESTHandler('web_rename',        \&_renameWeb);
+    Foswiki::Func::registerRESTHandler('wr',                \&_renameWeb);
+    Foswiki::Func::registerRESTHandler('web_move',          \&_moveWeb);
+    Foswiki::Func::registerRESTHandler('wm',                \&_moveWeb);
+    Foswiki::Func::registerRESTHandler('web_create',        \&_createWeb);
+    Foswiki::Func::registerRESTHandler('wc',                \&_createWeb);
+
+    return 1;
 }
 
-sub _renameTopic {    
-   my $session = shift;
-   my $query = $session->{cgiQuery};
+sub _showTemplate {
+    my ( $topic, $web, $skin, $templatename ) = @_;
+    my $template = Foswiki::Func::loadTemplate( $templatename, $skin, undef );
+    return Foswiki::Func::expandCommonVariables( $template, $topic, $web, undef );
+}
 
-   # Initialize Foswiki
-   my $topic = $session->{topicName};
-   my $webName = $session->{webName};
-   my $userName = Foswiki::Func::getWikiName();
-   my $theUrl = $query->url;
+=begin TML
+
+---++ _renameTopic( $session )
+
+This is a wrapper substitute for the rename bin script. The main difference is,
+that this method sets proper status codes.
+
+It checks the prerequisites and sets the following status codes:
+403 : the user is not allowed to CHANGE the topic
+404 : the source topic does not exist
+500 : url parameter(s) are missing
+500 : newtopic is not valid (non) wikiword
+
+newweb url parameter will be replaces with source webname.
+
+Return:
+In case of an error, the renametopic template is returned.
+In case of no error, the Manage:rename() method is invoked,
+which will take further (url) parameters and may end in a redirect.
+
+=cut
+
+sub _renameTopic {
+    my $session      = shift;
+    my $query        = $session->{cgiQuery};
+    my $theTopic     = $session->{topicName}; # set by topic-url-param (rest handler)
+    my $theWeb       = $session->{webName};   # set by topic-url-param (rest handler)
+    my $theUser      = Foswiki::Func::getWikiName();
+    my $theSkin      = $query->param("skin")     || undef; # SMELL: should be sanatized
+    my $theNewTopic  = $query->param("newtopic") || undef; # SMELL: should be sanatized
+    my $isSetTopic   = $query->param("topic")    || 0;
+    my $templatename = "renametopic";
+
+    # check topic parameter first; if not set, the rest is irrelevant
+    my @missing = ();
+    if (!$isSetTopic)           { push( @missing, "topic") };
+    if (!defined($theNewTopic)) { push( @missing, "newtopic") };
+    if ( scalar(@missing) > 0 ) {
+      $session->{response}->header( -status => "500 Missing parameter: ".join(",", @missing) );
+      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
+    }
+
+    use Foswiki::UI::Manage;
+    $theNewTopic = Foswiki::UI::Manage::_safeTopicName( $theNewTopic );
+
+    # check if topic exists
+    if ( !Foswiki::Func::topicExists( $theWeb, $theTopic ) ) {
+      $session->{response}->header( -status => "404 File not found" );
+      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
+    }
+
+    # check permission
+    if ( !Foswiki::Func::checkAccessPermission( "RENAME", $theUser, undef, $theTopic, $theWeb, undef ) ) {
+      $session->{response}->header( -status => "403 Forbidden to rename this topic" );
+      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatenam );
+    }
+
+    # does the newtopic met the optional nonwikiword requirement?
+    if ( !Foswiki::Func::isValidTopicName( $theNewTopic, Foswiki::isTrue( $query->param('nonwikiword') ) ) ) {
+      $session->{response}->header( -status => "500 Not valid: newtopic" );
+      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
+    }
+
+    # does newtopic already exists?
+    if ( Foswiki::Func::topicExists( $theWeb, $theNewTopic ) ) {
+      $session->{response}->header( -status => "500 Target topic already exists" );
+      return _showTemplate( $theTopic, $theWeb, $theSkin );
+    }
+
+    # if everything is fine, we can do the actual renaming now
+    $query->param( "newweb", $theWeb );
+    Foswiki::UI::Manage::rename( $session );
+
+    return "";
+}
+
+=begin TML
+
+---++ _moveTopic( $session )
+
+This is a wrapper substitute for the rename bin script. The main difference is,
+that this method sets proper status codes.
+
+It checks the prerequisites and sets the following status codes:
+403 : the user is not allowed to CHANGE the topic
+404 : the source topic does not exist
+500 : url parameter(s) are missing
+500 : newtopic is not valid (non) wikiword
+
+Return:
+In case of an error, the movetopic template is returned.
+In case of no error, the Manage:rename() method is invoked,
+which will take further (url) parameters and may end in a redirect.
+
+=cut
+
+sub _moveTopic {
+    my $session      = shift;
+    my $query        = $session->{cgiQuery};
+    my $theTopic     = $session->{topicName}; # set by topic-url-param (rest handler)
+    my $theWeb       = $session->{webName};   # set by topic-url-param (rest handler)
+    my $theUser      = Foswiki::Func::getWikiName();
+    my $theSkin      = $query->param("skin")     || undef; # SMELL: should be sanatized
+    my $theNewWeb    = $query->param("newweb")   || undef; # SMELL: should be sanatized
+    my $theNewTopic  = $query->param("newtopic") || undef; # SMELL: should be sanatized
+    my $isSetTopic   = $query->param("topic")    || 0;
+    my $templatename = "movetopic";
+
+    # check topic parameter first; if not set, the rest is irrelevant
+    my @missing = ();
+    if (!$isSetTopic)           { push( @missing, "topic") };
+    if (!defined($theNewTopic)) { push( @missing, "newtopic") };
+    if (!defined($theNewWeb))   { push( @missing, "newweb") };
+    if ( scalar(@missing) > 0 ) {
+      $session->{response}->header( -status => "500 Missing parameter: ".join(",", @missing) );
+      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
+    }
+
+    use Foswiki::UI::Manage;
+    $theNewTopic = Foswiki::UI::Manage::_safeTopicName( $theNewTopic );
+
+    # check if topic exists
+    if ( !Foswiki::Func::topicExists( $theWeb, $theTopic ) ) {
+      $session->{response}->header( -status => "404 File not found" );
+      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
+    }
+
+    # check permission
+    if ( !Foswiki::Func::checkAccessPermission( "RENAME", $theUser, undef, $theTopic, $theWeb, undef ) ) {
+      $session->{response}->header( -status => "403 Forbidden to rename this topic" );
+      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatenam );
+    }
+
+    # does the newtopic met the optional nonwikiword requirement?
+    if ( !Foswiki::Func::isValidTopicName( $theNewTopic, Foswiki::isTrue( $query->param('nonwikiword') ) ) ) {
+      $session->{response}->header( -status => "500 Not valid: newtopic" );
+      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
+    }
+
+    # does newtopic already exists?
+    if ( Foswiki::Func::topicExists( $theNewWeb, $theNewTopic ) ) {
+      $session->{response}->header( -status => "500 Target topic already exists" );
+      return _showTemplate( $theTopic, $theWeb, $theSkin );
+    }
+
+    # if everything is fine, we can do the actual renaming now
+    Foswiki::UI::Manage::rename( $session );
+
+    return "";
 }
