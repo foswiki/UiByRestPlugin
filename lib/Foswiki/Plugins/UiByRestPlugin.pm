@@ -100,6 +100,7 @@ This is a wrapper substitute for the rename bin script.
 It checks the prerequisites and sets the following status codes:
 400 : url parameter(s) are missing
 400 : newtopic is not valid (non) wikiword
+401 : access denied for unauthorized user
 403 : the user is not allowed to RENAME the topic
 404 : the source topic does not exist
 409 : the target topic already exists
@@ -144,7 +145,11 @@ sub _renameTopic {
 
     # check permission
     if ( !Foswiki::Func::checkAccessPermission( "RENAME", $theUser, undef, $theTopic, $theWeb, undef ) ) {
-      $session->{response}->header( -status => "403 Forbidden to rename this topic" );
+      if ( $theUser eq $Foswiki::cfg{DefaultUserWikiName} ) {
+        $session->{response}->header( -status => "401 Unauthorized" );
+      } else {
+        $session->{response}->header( -status => "403 Forbidden to rename this topic" );
+      }
       return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }
 
@@ -177,6 +182,7 @@ This is a wrapper substitute for the rename bin script.
 It checks the prerequisites and sets the following status codes:
 400 : url parameter(s) are missing
 400 : newtopic is not valid (non) wikiword
+401 : access denied for unauthorized user
 403 : the user is not allowed to RENAME the topic
 404 : the source topic does not exist
 409 : the target topic already exists
@@ -206,7 +212,7 @@ sub _moveTopic {
     if (!defined($theNewTopic)) { push( @missing, "newtopic") };
     if (!defined($theNewWeb))   { push( @missing, "newweb") };
     if ( scalar(@missing) > 0 ) {
-      $session->{response}->header( -status => "500 Missing parameter: ".join(",", @missing) );
+      $session->{response}->header( -status => "400 Missing parameter: ".join(",", @missing) );
       return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }
 
@@ -221,7 +227,11 @@ sub _moveTopic {
 
     # check permission
     if ( !Foswiki::Func::checkAccessPermission( "RENAME", $theUser, undef, $theTopic, $theWeb, undef ) ) {
-      $session->{response}->header( -status => "403 Forbidden to rename this topic" );
+      if ( $theUser eq $Foswiki::cfg{DefaultUserWikiName} ) {
+        $session->{response}->header( -status => "401 Unauthorized" );
+      } else {
+        $session->{response}->header( -status => "403 Forbidden to rename this topic" );
+      }
       return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }
 
@@ -245,6 +255,95 @@ sub _moveTopic {
 
 =begin TML
 
+---++ _moveAttachment( $session )
+This is a wrapper substitute for the rename bin script.
+
+It checks the prerequisites and sets the following status codes:
+400 : url parameter(s) are missing
+400 : newtopic is not valid (non) wikiword
+401 : access denied for unauthorized user
+403 : the user is not allowed to CHANGE on attachment topic
+404 : attachment does not exist
+409 : the target topic already exists
+
+Return:
+In case of an error, the moveattachment template is returned.
+In case of no error, the Manage:rename() method is invoked,
+which will take further (url) parameters and may end in a redirect.
+
+=cut
+
+sub _moveAttachment {
+    my $session       = shift;
+    my $query         = $session->{cgiQuery};
+    my $theTopic      = $session->{topicName}; # set by topic-url-param (rest handler)
+    my $theWeb        = $session->{webName};   # set by topic-url-param (rest handler)
+    my $theUser       = Foswiki::Func::getWikiName();
+    my $theSkin       = $query->param("skin")       || undef; # SMELL: should be sanatized
+    my $theNewWeb     = $query->param("newweb")     || undef; # SMELL: should be sanatized
+    my $theNewTopic   = $query->param("newtopic")   || undef; # SMELL: should be sanatized
+    my $theAttachment = $query->param("attachment") || undef; # SMELL: should be sanatized
+    my $isSetTopic    = $query->param("topic")      || 0;
+    my $templatename  = "moveattachment";
+
+    # check topic parameter first; if not set, the rest is irrelevant
+    my @missing = ();
+    if (!$isSetTopic)             { push( @missing, "topic") };
+    if (!defined($theAttachment)) { push( @missing, "attachment") };
+    if (!defined($theNewTopic))   { push( @missing, "newtopic") };
+    if (!defined($theNewWeb))     { push( @missing, "newweb") };
+    if ( scalar(@missing) > 0 ) {
+      $session->{response}->header( -status => "400 Missing parameter: ".join(",", @missing) );
+      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
+    }
+
+    # check if attachment exists
+    if ( !Foswiki::Func::attachmentExists( $theWeb, $theTopic, $theAttachment ) ) {
+      $session->{response}->header( -status => "404 Attachment not found" );
+      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
+    }
+
+    # check permissions
+    # ...on old location
+    if ( !Foswiki::Func::checkAccessPermission( "CHANGE", $theUser, undef, $theTopic, $theWeb, undef ) ) {
+      if ( $theUser eq $Foswiki::cfg{DefaultUserWikiName} ) {
+        $session->{response}->header( -status => "401 Unauthorized" );
+      } else {
+        $session->{response}->header( -status => "403 Forbidden: Current location is write protected" );
+      }
+      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
+    }
+    # ...on new location
+    if ( !Foswiki::Func::checkAccessPermission( "CHANGE", $theUser, undef, $theNewTopic, $theNewWeb, undef ) ) {
+      if ( $theUser eq $Foswiki::cfg{DefaultUserWikiName} ) {
+        $session->{response}->header( -status => "401 Unauthorized" );
+      } else {
+        $session->{response}->header( -status => "403 Forbidden: New location is write protected" );
+      }
+      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
+    }
+
+    # does newtopic exists?
+    if ( !Foswiki::Func::topicExists( $theNewWeb, $theNewTopic ) ) {
+      $session->{response}->header( -status => "404 New location not found" );
+      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
+    }
+
+    # does attachment in new location already exists?
+    if ( Foswiki::Func::attachmentExists( $theNewWeb, $theNewTopic, $theAttachment ) ) {
+      $session->{response}->header( -status => "409 Conflict Target attachment already exists" );
+      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
+    }
+
+    # if everything is fine, we can do the actual renaming now
+    use Foswiki::UI::Manage;
+    Foswiki::UI::Manage::rename( $session );
+
+    return "done";
+}
+
+=begin TML
+
 ---++ _renameWeb( $session )
 %X% *Untested yet* %X%
 
@@ -253,6 +352,7 @@ This is a wrapper substitute for the rename bin script.
 It checks the prerequisites and sets the following status codes:
 400 : url parameter(s) are missing
 400 : newparentweb or newsubweb is not a valid webname
+401 : access denied for unauthorized user
 403 : the user is not allowed to CHANGE the topic
 404 : the old web does not exist
 409 : the newweb already exists
@@ -326,13 +426,21 @@ sub _renameWeb {
     # If the user is not allowed to rename anything in the parent web - stop here
     # This also ensures we check root webs for ALLOWROOTRENAME and DENYROOTRENAME
     if ( !Foswiki::Func::checkAccessPermission( 'RENAME', $theUser, undef, undef, $oldParentWeb || undef, undef ) ) {
-      $session->{response}->header( -status => "403 Forbidden to rename in old parent web" );
+      if ( $theUser eq $Foswiki::cfg{DefaultUserWikiName} ) {
+        $session->{response}->header( -status => "401 Unauthorized" );
+      } else {
+        $session->{response}->header( -status => "403 Forbidden to rename in old parent web" );
+      }
       return _showTemplate( $theTopic, $theOldWeb, $theSkin, $templatename );
     }
 
     # If old web is a root web then also stop if ALLOW/DENYROOTCHANGE prevents access
     if ( !$oldParentWeb && !Foswiki::Func::checkAccessPermission( 'CHANGE', $theUser, undef, undef, $oldParentWeb || undef, undef ) ) {
-      $session->{response}->header( -status => "403 Forbidden to change old root parent web" );
+      if ( $theUser eq $Foswiki::cfg{DefaultUserWikiName} ) {
+        $session->{response}->header( -status => "401 Unauthorized" );
+      } else {
+        $session->{response}->header( -status => "403 Forbidden to change old root parent web" );
+      }
       return _showTemplate( $theTopic, $theOldWeb, $theSkin, $templatename );
     }
 
