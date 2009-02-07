@@ -1,2 +1,3 @@
 lib/Foswiki/Plugins/UiByRestPlugin.pm Perl module
+lib/Foswiki/Plugins/UiByRestPlugin/TopicRename.pm
 data/System/UiByRestPlugin.txt Plugin topic

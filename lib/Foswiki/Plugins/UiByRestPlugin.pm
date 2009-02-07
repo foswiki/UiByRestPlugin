@@ -51,6 +51,7 @@ my $jqPluginName = "JQueryCompatibilityModePlugin";
 sub initPlugin {
     my ( $topic, $web, $user, $installWeb ) = @_;
 
+    # do-some-UI-action rest handlers
     # 2-letter shortcuts for limited-url-length environments
     Foswiki::Func::registerRESTHandler('topic_rename',      \&_renameTopic);
     Foswiki::Func::registerRESTHandler('tr',                \&_renameTopic);
@@ -83,14 +84,30 @@ sub initPlugin {
     Foswiki::Func::registerRESTHandler('web_create',        \&_createWeb);
     Foswiki::Func::registerRESTHandler('wc',                \&_createWeb);
 
+    # request-a-UI-form ( template ) rest handlers
+    Foswiki::Func::registerRESTHandler('trform',                \&_renameTopicForm);
     return 1;
 }
 
 sub _showTemplate {
     my ( $topic, $web, $skin, $templatename ) = @_;
+    
     my $template = Foswiki::Func::loadTemplate( $templatename, $skin, undef );
     return Foswiki::Func::expandCommonVariables( $template, $topic, $web, undef );
 }
+
+=begin TML
+
+---++ _renameTopicForm( $session )
+Return the template which is defined for renaming a topic ( renametopic.YOURSKIN.tmpl )
+=cut
+
+sub _renameTopicForm {
+    my $session = shift;
+    use Foswiki::Plugins::UiByRestPlugin::TopicRename;
+    return Foswiki::Plugins::UiByRestPlugin::TopicRename::template($session);   
+}
+
 
 =begin TML
 
@@ -115,63 +132,8 @@ which will take further (url) parameters and may end in a redirect.
 =cut
 
 sub _renameTopic {
-    my $session      = shift;
-    my $query        = $session->{cgiQuery};
-    my $theTopic     = $session->{topicName}; # set by topic-url-param (rest handler)
-    my $theWeb       = $session->{webName};   # set by topic-url-param (rest handler)
-    my $theUser      = Foswiki::Func::getWikiName();
-    my $theSkin      = $query->param("skin")     || undef; # SMELL: should be sanatized
-    my $theNewTopic  = $query->param("newtopic") || undef; # SMELL: should be sanatized
-    my $isSetTopic   = $query->param("topic")    || 0;
-    my $templatename = "renametopic";
-
-    # check topic parameter first; if not set, the rest is irrelevant
-    my @missing = ();
-    if (!$isSetTopic)           { push( @missing, "topic") };
-    if (!defined($theNewTopic)) { push( @missing, "newtopic") };
-    if ( scalar(@missing) > 0 ) {
-      $session->{response}->header( -status => "400 Missing parameter: ".join(",", @missing) );
-      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
-    }
-
-    use Foswiki::UI::Manage;
-    $theNewTopic = Foswiki::UI::Manage::_safeTopicName( $theNewTopic );
-
-    # check if topic exists
-    if ( !Foswiki::Func::topicExists( $theWeb, $theTopic ) ) {
-      $session->{response}->header( -status => "404 File not found" );
-      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
-    }
-
-    # check permission
-    if ( !Foswiki::Func::checkAccessPermission( "RENAME", $theUser, undef, $theTopic, $theWeb, undef ) ) {
-      if ( $theUser eq $Foswiki::cfg{DefaultUserWikiName} ) {
-        $session->{response}->header( -status => "401 Unauthorized" );
-      } else {
-        $session->{response}->header( -status => "403 Forbidden to rename this topic" );
-      }
-      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
-    }
-
-    # does the newtopic met the optional nonwikiword requirement?
-    if ( !Foswiki::Func::isValidTopicName( $theNewTopic, Foswiki::isTrue( $query->param('nonwikiword') ) ) ) {
-      $session->{response}->header( -status => "400 Not valid: newtopic" );
-      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
-    }
-
-    # does newtopic already exists?
-    if ( Foswiki::Func::topicExists( $theWeb, $theNewTopic ) ) {
-      $session->{response}->header( -status => "409 Conflict Target topic already exists" );
-      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
-    }
-
-    # since this is a topic rename, we hardcode the web here
-    $query->param( "newweb", $theWeb );
-
-    # if everything is fine, we can do the actual renaming now
-    Foswiki::UI::Manage::rename( $session );
-
-    return "";
+    my $session = shift;
+    return Foswiki::Plugins::UiByRestPlugin::TopicRename::do($session);
 }
 
 =begin TML
