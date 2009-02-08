@@ -16,10 +16,10 @@
 
 package Foswiki::Plugins::UiByRestPlugin::TopicRename;
 
-
 use strict;
 use warnings;
 use Error qw(:try);
+
 # the template which is generally used for this action
 my $templatename = "renametopic";
 
@@ -46,20 +46,25 @@ which will take further (url) parameters and may end in a redirect.
 =cut
 
 sub do {
-    my $session      = shift;
+    my $session = shift;
     # check preconditions. If something fails and is critical
     # a status code will be set and a template will be returned if.
-   
+
     my $template = _hardPrecondition($session);
     if($template != 0) { # if a template has been returned, we have errors. So lets print the template to the body and return.
-        return $template;        
-    }    
+        return $template;
+    }
     $template = _softPrecondition($session);
     if($template != 0) { # if a template has been returned, we have errors. So lets print the template to the body and return.
-        return $template;        
+        return $template;
     }
-        
+
+    # since this is a topic rename, we hardcode the web here
+    my $query = $session->{cgiQuery};
+    $query->param( "newweb", $session->{webName} );
+
     # if everything is fine, we can do the actual renaming now
+    use Foswiki::UI::Manage;
     Foswiki::UI::Manage::rename( $session );
 
     return "";
@@ -72,95 +77,100 @@ Return the template which is defined for renaming a topic ( renametopic.YOURSKIN
 
 sub template {
     my $session  = shift;
-    my $query        = $session->{cgiQuery};
-    my $theTopic     = $session->{topicName}; # set by topic-url-param (rest handler)
-    my $theWeb       = $session->{webName};   # set by topic-url-param (rest handler)
-    my $theSkin      = $query->param("skin")     || Foswiki::Func::getSkin(); # SMELL: should be sanatized
+    my $query    = $session->{cgiQuery};
+    my $theTopic = $session->{topicName};
+    my $theWeb   = $session->{webName};
+    my $theSkin  = $query->param("skin") || Foswiki::Func::getSkin(); # SMELL: should be sanatized
+
     # we do this, to get the proper status code.
     # Eventhough we return the template requested in any case
     # we will e.g. set a 403 if the user is not allowed
     # this can be used by the request to maybe better show a login screen
     # or something else.
     _hardPrecondition($session);
+
     # as we dont care about the template the hardPrecondition returns
-    # we load the one requested     
-    return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );    
+    # we load the one requested
+    return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
 }
 
 
 sub _hardPrecondition {
-    my $session  = shift;
-    my $query        = $session->{cgiQuery};
-    my $theTopic     = $session->{topicName}; # set by topic-url-param (rest handler)
-    my $theWeb       = $session->{webName};   # set by topic-url-param (rest handler)    
-    my $theUser      = Foswiki::Func::getWikiName();
-    my $theSkin      = $query->param("skin")     || Foswiki::Func::getSkin(); # SMELL: should be sanatized
-    my $isSetTopic   = $query->param("topic")    || 0;
+    my $session    = shift;
+    my $query      = $session->{cgiQuery};
+    my $theTopic   = $session->{topicName};
+    my $theWeb     = $session->{webName};
+    my $theUser    = Foswiki::Func::getWikiName();
+    my $theSkin    = $query->param("skin")  || Foswiki::Func::getSkin(); # SMELL: should be sanatized
+    my $isSetTopic = $query->param("topic") || 0;
+
     # check topic parameter first; if not set, the rest is irrelevant
     if ( !$isSetTopic ) {
-      $session->{response}->header( -status => "400 Missing parameter: topic" );
+      $session->{response}->status( "400 Missing parameter: topic" );
       return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }
-    
+
     # check if topic exists
     if ( !Foswiki::Func::topicExists( $theWeb, $theTopic ) ) {
-      $session->{response}->header( -status => "404 File not found" );
+      $session->{response}->status( "404 File not found" );
       return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }
 
     # check permission
     if ( !Foswiki::Func::checkAccessPermission( "RENAME", $theUser, undef, $theTopic, $theWeb, undef ) ) {
       if ( $theUser eq $Foswiki::cfg{DefaultUserWikiName} ) {
-        $session->{response}->header( -status => "401 Unauthorized" );
+        $session->{response}->status( "401 Unauthorized" );
         return _showTemplate( $theTopic, $theWeb, $theSkin, "login" );
-      } 
-      # else 
-      $session->{response}->header( -status => "403 Forbidden to rename this topic" );      
+      }
+      # else
+      $session->{response}->status( "403 Forbidden to rename this topic" );
       return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
-    }  
-    
-    return 0;   
+    }
+
+    return 0;
 }
 
 sub _softPrecondition {
-    my $session  = shift;  
-    my $query        = $session->{cgiQuery};
-    my $theTopic     = $session->{topicName}; # set by topic-url-param (rest handler)
-    my $theWeb       = $session->{webName};   # set by topic-url-param (rest handler)
-    my $theSkin      = $query->param("skin")     || Foswiki::Func::getSkin(); # SMELL: should be sanatized
-    my $theNewTopic  = $query->param("newtopic") || undef; # SMELL: should be sanatized
+    my $session     = shift;
+    my $query       = $session->{cgiQuery};
+    my $theTopic    = $session->{topicName};
+    my $theWeb      = $session->{webName};
+    my $theSkin     = $query->param("skin")     || Foswiki::Func::getSkin(); # SMELL: should be sanatized
+    my $theNewTopic = $query->param("newtopic") || undef; # SMELL: should be sanatized
+
     my @missing = ();
     if (!defined($theNewTopic)) { push( @missing, "newtopic") };
+
     # check if we miss parameters
     if ( scalar(@missing) > 0 ) {
-      $session->{response}->header( -status => "400 Missing parameter: ".join(",", @missing) );
+      $session->{response}->status( "400 Missing parameter: ".join(",", @missing) );
       return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
-    }    
- 
-    use Foswiki::UI::Manage;
-    $theNewTopic = Foswiki::UI::Manage::_safeTopicName( $theNewTopic );
-    
+    }
+
+    # former Foswiki::UI::Manage::_safeTopicname()
+    $theNewTopic =~ s/\s//go;
+    $theNewTopic = ucfirst $theNewTopic;    # Item3270
+    $theNewTopic =~ s![./]!_!g;
+    $theNewTopic =~ s/($Foswiki::cfg{NameFilter})//go;
+
     # does the newtopic met the optional nonwikiword requirement?
     if ( !Foswiki::Func::isValidTopicName( $theNewTopic, Foswiki::isTrue( $query->param('nonwikiword') ) ) ) {
-      $session->{response}->header( -status => "400 Not valid: newtopic" );
+      $session->{response}->status( "400 Not valid: newtopic" );
       return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }
 
     # does newtopic already exists?
     if ( Foswiki::Func::topicExists( $theWeb, $theNewTopic ) ) {
-      $session->{response}->header( -status => "409 Conflict Target topic already exists" );
+      $session->{response}->status( "409 Conflict Target topic already exists" );
       return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }
 
-    # since this is a topic rename, we hardcode the web here
-    $query->param( "newweb", $theWeb );
-    
-    return 0;    
+    return 0;
 }
 
 sub _showTemplate {
     my ( $topic, $web, $skin, $templatename ) = @_;
-    
+
     my $template = Foswiki::Func::loadTemplate( $templatename, $skin, undef );
     return Foswiki::Func::expandCommonVariables( $template, $topic, $web, undef );
 }

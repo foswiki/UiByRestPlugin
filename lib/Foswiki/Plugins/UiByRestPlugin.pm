@@ -53,6 +53,7 @@ sub initPlugin {
 
     # do-some-UI-action rest handlers
     # 2-letter shortcuts for limited-url-length environments
+    Foswiki::Func::registerRESTHandler('login',             \&_login);
     Foswiki::Func::registerRESTHandler('topic_rename',      \&_renameTopic);
     Foswiki::Func::registerRESTHandler('tr',                \&_renameTopic);
     Foswiki::Func::registerRESTHandler('topic_move',        \&_moveTopic);
@@ -91,9 +92,21 @@ sub initPlugin {
 
 sub _showTemplate {
     my ( $topic, $web, $skin, $templatename ) = @_;
-    
+
     my $template = Foswiki::Func::loadTemplate( $templatename, $skin, undef );
     return Foswiki::Func::expandCommonVariables( $template, $topic, $web, undef );
+}
+
+=begin TML
+
+---++ _login( $session )
+Perform a login and return eventually a login form
+
+=cut
+
+sub _login {
+    my $session = shift;
+    return Foswiki::Plugins::UiByRestPlugin::Login::do( $session );
 }
 
 =begin TML
@@ -105,7 +118,7 @@ Return the template which is defined for renaming a topic ( renametopic.YOURSKIN
 sub _renameTopicForm {
     my $session = shift;
     use Foswiki::Plugins::UiByRestPlugin::TopicRename;
-    return Foswiki::Plugins::UiByRestPlugin::TopicRename::template($session);   
+    return Foswiki::Plugins::UiByRestPlugin::TopicRename::template( $session );
 }
 
 
