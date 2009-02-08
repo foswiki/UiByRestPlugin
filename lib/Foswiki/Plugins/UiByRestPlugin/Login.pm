@@ -46,7 +46,7 @@ sub do {
     # a status code will be set and a template will be returned if.
 
     my $template = _checkPrecondition($session);
-    if($template != 0) { # if a template has been returned, we have errors. So lets print the template to the body and return.
+    if($template ne 0) { # if a template has been returned, we have errors. So lets print the template to the body and return.
         return $template;
     }
 
