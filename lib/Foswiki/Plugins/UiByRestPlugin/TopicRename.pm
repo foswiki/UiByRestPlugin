@@ -56,14 +56,11 @@ sub do {
     }
     $template = _softPrecondition($session);
     if($template ne 0) { # if a template has been returned, we have errors. So lets print the template to the body and return.
-        
         return $template;
-        
     }
 
     # since this is a topic rename, we hardcode the web here
-    my $query = $session->{cgiQuery};
-    $query->param( "newweb", $session->{webName} );
+    $session->{cgiQuery}->param( "newweb", $session->{webName} );
 
     # if everything is fine, we can do the actual renaming now
     use Foswiki::UI::Manage;
@@ -145,7 +142,7 @@ sub _softPrecondition {
 
     # check if we miss parameters
     if ( scalar(@missing) > 0 ) {
-      $session->{response}->status( "400 Missing parameter: ".join(",", @missing) );      
+      $session->{response}->status( "400 Missing parameter: ".join(",", @missing) );
       return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }
 

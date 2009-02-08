@@ -14,32 +14,19 @@
 #
 # Author: Eugen Mayer, Oliver Krueger
 
-package Foswiki::Plugins::UiByRestPlugin::TopicMove;
+package Foswiki::Plugins::UiByRestPlugin::AttachmentMove;
 
 use strict;
 use warnings;
 use Error qw(:try);
 
 # the template which is generally used for this action
-my $templatename = "movetopic";
+my $templatename = "moveattachment";
 
 =begin TML
 
 ---++ do( $session )
-This is a partial wrapper substitute for the rename bin script.
-
-It checks the prerequisites and sets the following status codes:
-400 : url parameter(s) are missing
-400 : newtopic is not valid (non) wikiword
-401 : access denied for unauthorized user
-403 : the user is not allowed to RENAME the topic
-404 : the source topic does not exist
-409 : the target topic already exists
-
-Return:
-In case of an error, the renametopic template is returned.
-In case of no error, the Manage:rename() method is invoked,
-which will take further (url) parameters and may end in a redirect.
+See documentation in Foswiki::Plugins::UiByRestPlugin::moveAttachment()
 
 =cut
 
@@ -90,13 +77,14 @@ sub template {
 
 
 sub _hardPrecondition {
-    my $session    = shift;
-    my $query      = $session->{cgiQuery};
-    my $theTopic   = $session->{topicName};
-    my $theWeb     = $session->{webName};
-    my $theUser    = Foswiki::Func::getWikiName();
-    my $theSkin    = $query->param("skin")  || Foswiki::Func::getSkin(); # SMELL: should be sanatized
-    my $isSetTopic = $query->param("topic") || 0;
+    my $session       = shift;
+    my $query         = $session->{cgiQuery};
+    my $theTopic      = $session->{topicName};
+    my $theWeb        = $session->{webName};
+    my $theUser       = Foswiki::Func::getWikiName();
+    my $theSkin       = $query->param("skin")  || Foswiki::Func::getSkin(); # SMELL: should be sanatized
+    my $isSetTopic    = $query->param("topic") || 0;
+    my $theAttachment = $query->param("attachment") || undef; # SMELL: should be sanatized
 
     # check topic parameter first; if not set, the rest is irrelevant
     if ( !$isSetTopic ) {
@@ -104,20 +92,28 @@ sub _hardPrecondition {
       return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }
 
-    # check if topic exists
-    if ( !Foswiki::Func::topicExists( $theWeb, $theTopic ) ) {
-      $session->{response}->status( "404 Topic not found" );
+    # check topic parameter first; if not set, the rest is irrelevant
+    my @missing = ();
+    if (!$isSetTopic)             { push( @missing, "topic") };
+    if (!defined($theAttachment)) { push( @missing, "attachment") };
+    if ( scalar(@missing) > 0 ) {
+      $session->{response}->status( "400 Missing parameter: ".join(",", @missing) );
       return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }
 
-    # check permission
-    if ( !Foswiki::Func::checkAccessPermission( "RENAME", $theUser, undef, $theTopic, $theWeb, undef ) ) {
+    # check if attachment exists
+    if ( !Foswiki::Func::attachmentExists( $theWeb, $theTopic, $theAttachment ) ) {
+      $session->{response}->status( "404 Attachment not found" );
+      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
+    }
+
+    # check permission on old location
+    if ( !Foswiki::Func::checkAccessPermission( "CHANGE", $theUser, undef, $theTopic, $theWeb, undef ) ) {
       if ( $theUser eq $Foswiki::cfg{DefaultUserWikiName} ) {
         $session->{response}->status( "401 Unauthorized" );
         return _showTemplate( $theTopic, $theWeb, $theSkin, "login" );
-      }
-      # else
-      $session->{response}->status( "403 Forbidden to rename this topic" );
+      } # else
+      $session->{response}->status( "403 Forbidden: Current location is write protected" );
       return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }
 
@@ -125,15 +121,18 @@ sub _hardPrecondition {
 }
 
 sub _softPrecondition {
-    my $session     = shift;
-    my $query       = $session->{cgiQuery};
-    my $theTopic    = $session->{topicName};
-    my $theWeb      = $session->{webName};
-    my $theSkin     = $query->param("skin")     || Foswiki::Func::getSkin(); # SMELL: should be sanatized
-    my $theNewTopic = $query->param("newtopic") || undef; # SMELL: should be sanatized
+    my $session       = shift;
+    my $query         = $session->{cgiQuery};
+    my $theTopic      = $session->{topicName};
+    my $theWeb        = $session->{webName};
+    my $theSkin       = $query->param("skin")       || Foswiki::Func::getSkin(); # SMELL: should be sanatized
+    my $theNewTopic   = $query->param("newtopic")   || undef; # SMELL: should be sanatized
+    my $theNewWeb     = $query->param("newweb")     || undef; # SMELL: should be sanatized
+    my $theAttachment = $query->param("attachment") || undef; # SMELL: should be sanatized
 
     my @missing = ();
     if (!defined($theNewTopic)) { push( @missing, "newtopic") };
+    if (!defined($theNewWeb))   { push( @missing, "newweb") };
 
     # check if we miss parameters
     if ( scalar(@missing) > 0 ) {
@@ -141,21 +140,25 @@ sub _softPrecondition {
       return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }
 
-    # former Foswiki::UI::Manage::_safeTopicname()
-    $theNewTopic =~ s/\s//go;
-    $theNewTopic = ucfirst $theNewTopic;    # Item3270
-    $theNewTopic =~ s![./]!_!g;
-    $theNewTopic =~ s/($Foswiki::cfg{NameFilter})//go;
-
-    # does the newtopic met the optional nonwikiword requirement?
-    if ( !Foswiki::Func::isValidTopicName( $theNewTopic, Foswiki::isTrue( $query->param('nonwikiword') ) ) ) {
-      $session->{response}->status( "400 Not valid: newtopic" );
+    # check permissions on new location
+    if ( !Foswiki::Func::checkAccessPermission( "CHANGE", $theUser, undef, $theNewTopic, $theNewWeb, undef ) ) {
+      if ( $theUser eq $Foswiki::cfg{DefaultUserWikiName} ) {
+        $session->{response}->status( "401 Unauthorized" );
+        return _showTemplate( $theTopic, $theWeb, $theSkin, "login" );
+      } # else
+      $session->{response}->status( "403 Forbidden: New location is write protected" );
       return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }
 
-    # does newtopic already exists?
-    if ( Foswiki::Func::topicExists( $theWeb, $theNewTopic ) ) {
-      $session->{response}->status( "409 Conflict Target topic already exists" );
+    # does newtopic exists?
+    if ( !Foswiki::Func::topicExists( $theNewWeb, $theNewTopic ) ) {
+      $session->{response}->header( -status => "404 New location not found" );
+      return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
+    }
+
+    # does attachment in new location already exists?
+    if ( Foswiki::Func::attachmentExists( $theNewWeb, $theNewTopic, $theAttachment ) ) {
+      $session->{response}->header( -status => "409 Conflict Target attachment already exists" );
       return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }
 
