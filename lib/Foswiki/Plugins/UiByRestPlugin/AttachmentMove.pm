@@ -125,6 +125,7 @@ sub _softPrecondition {
     my $query         = $session->{cgiQuery};
     my $theTopic      = $session->{topicName};
     my $theWeb        = $session->{webName};
+    my $theUser       = Foswiki::Func::getWikiName();
     my $theSkin       = $query->param("skin")       || Foswiki::Func::getSkin(); # SMELL: should be sanatized
     my $theNewTopic   = $query->param("newtopic")   || undef; # SMELL: should be sanatized
     my $theNewWeb     = $query->param("newweb")     || undef; # SMELL: should be sanatized
