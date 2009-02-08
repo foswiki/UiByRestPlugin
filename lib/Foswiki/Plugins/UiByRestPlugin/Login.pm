@@ -69,13 +69,6 @@ sub template {
     my $theWeb   = $session->{webName};
     my $theSkin  = $query->param("skin") || Foswiki::Func::getSkin(); # SMELL: should be sanatized
 
-    # we do this, to get the proper status code.
-    # Eventhough we return the template requested in any case
-    # we will e.g. set a 400 if the user is not allowed
-    # this can be used by the request to maybe better show a login screen
-    # or something else.
-    _checkPrecondition($session);
-
     # as we dont care about the template the hardPrecondition returns
     # we load the one requested
     return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
@@ -92,7 +85,7 @@ sub _checkPrecondition {
     my $thePassword = $query->param("password") || undef;
 
     # already logged in?
-    if ( Foswiki::Func::getWikiName() eq $Foswiki::cfg{DefaultUserWikiName} ) {
+    if ( Foswiki::Func::getWikiName() ne $Foswiki::cfg{DefaultUserWikiName} ) {
       $session->{response}->status( "400 Already logged in" );
       return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }

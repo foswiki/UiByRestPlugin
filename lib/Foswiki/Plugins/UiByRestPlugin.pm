@@ -83,10 +83,11 @@ sub initPlugin {
     Foswiki::Func::registerRESTHandler('web_move',          \&_moveWeb);
     Foswiki::Func::registerRESTHandler('wm',                \&_moveWeb);
     Foswiki::Func::registerRESTHandler('web_create',        \&_createWeb);
-    Foswiki::Func::registerRESTHandler('wc',                \&_createWeb);
+    Foswiki::Func::registerRESTHandler('wc',                \&_createWeb);    
 
     # request-a-UI-form ( template ) rest handlers
     Foswiki::Func::registerRESTHandler('trform',                \&_renameTopicForm);
+    Foswiki::Func::registerRESTHandler('loginform',                \&_loginForm);
     return 1;
 }
 
@@ -106,7 +107,21 @@ Perform a login and return eventually a login form
 
 sub _login {
     my $session = shift;
+    use Foswiki::Plugins::UiByRestPlugin::Login;
     return Foswiki::Plugins::UiByRestPlugin::Login::do( $session );
+}
+
+=begin TML
+
+---++ _loginForm( $session )
+return the Login form
+
+=cut
+
+sub _loginForm {
+    my $session = shift;
+    use Foswiki::Plugins::UiByRestPlugin::Login;
+    return Foswiki::Plugins::UiByRestPlugin::Login::template( $session );
 }
 
 =begin TML
