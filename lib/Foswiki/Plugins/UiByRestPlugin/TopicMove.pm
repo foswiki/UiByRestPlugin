@@ -14,19 +14,19 @@
 #
 # Author: Eugen Mayer, Oliver Krueger
 
-package Foswiki::Plugins::UiByRestPlugin::TopicRename;
+package Foswiki::Plugins::UiByRestPlugin::TopicMove;
 
 use strict;
 use warnings;
 use Error qw(:try);
 
 # the template which is generally used for this action
-my $templatename = "renametopic";
+my $templatename = "movetopic";
 
 =begin TML
 
 ---++ do( $session )
-This is a wrapper substitute for the rename bin script.
+This is a partial wrapper substitute for the rename bin script.
 
 It checks the prerequisites and sets the following status codes:
 400 : url parameter(s) are missing
@@ -35,8 +35,6 @@ It checks the prerequisites and sets the following status codes:
 403 : the user is not allowed to RENAME the topic
 404 : the source topic does not exist
 409 : the target topic already exists
-
-newweb url parameter will be replaces with source webname.
 
 Return:
 In case of an error, the renametopic template is returned.
@@ -51,19 +49,13 @@ sub do {
     # a status code will be set and a template will be returned if.
 
     my $template = _hardPrecondition($session);
-    if($template ne 0) { # if a template has been returned, we have errors. So lets print the template to the body and return.
+    if($template != 0) { # if a template has been returned, we have errors. So lets print the template to the body and return.
         return $template;
     }
     $template = _softPrecondition($session);
-    if($template ne 0) { # if a template has been returned, we have errors. So lets print the template to the body and return.
-        
+    if($template != 0) { # if a template has been returned, we have errors. So lets print the template to the body and return.
         return $template;
-        
     }
-
-    # since this is a topic rename, we hardcode the web here
-    my $query = $session->{cgiQuery};
-    $query->param( "newweb", $session->{webName} );
 
     # if everything is fine, we can do the actual renaming now
     use Foswiki::UI::Manage;
@@ -145,7 +137,7 @@ sub _softPrecondition {
 
     # check if we miss parameters
     if ( scalar(@missing) > 0 ) {
-      $session->{response}->status( "400 Missing parameter: ".join(",", @missing) );      
+      $session->{response}->status( "400 Missing parameter: ".join(",", @missing) );
       return _showTemplate( $theTopic, $theWeb, $theSkin, $templatename );
     }
 
