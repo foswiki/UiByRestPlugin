@@ -87,6 +87,7 @@ sub initPlugin {
 
     # request-a-UI-form ( template ) rest handlers
     Foswiki::Func::registerRESTHandler('trform',                \&_renameTopicForm);
+    Foswiki::Func::registerRESTHandler('tmform',                \&_moveTopicForm);
     Foswiki::Func::registerRESTHandler('loginform',                \&_loginForm);
     return 1;
 }
@@ -190,6 +191,20 @@ sub _moveTopic {
     use Foswiki::Plugins::UiByRestPlugin::TopicMove;
     return Foswiki::Plugins::UiByRestPlugin::TopicMove::do($session);
 }
+
+=begin TML
+
+---++ _renameTopicForm( $session )
+Return the template which is defined for renaming a topic ( movetopic.YOURSKIN.tmpl )
+=cut
+
+sub _moveTopicForm {
+    my $session = shift;
+    use Foswiki::Plugins::UiByRestPlugin::TopicMove;
+    return Foswiki::Plugins::UiByRestPlugin::TopicMove::template( $session );
+}
+
+
 
 =begin TML
 

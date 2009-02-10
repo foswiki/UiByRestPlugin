@@ -66,6 +66,7 @@ sub do {
     use Foswiki::UI::Manage;
     Foswiki::UI::Manage::rename( $session );
 
+    $session->{response}->status( 200 );
     return "";
 }
 =begin TML
