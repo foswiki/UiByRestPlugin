@@ -54,14 +54,11 @@ sub initPlugin {
     # do-some-UI-action rest handlers
     # 2-letter shortcuts for limited-url-length environments
     Foswiki::Func::registerRESTHandler('login',             \&_login);
+    # ********* TOPIC **********
     Foswiki::Func::registerRESTHandler('topic_rename',      \&_renameTopic);
     Foswiki::Func::registerRESTHandler('tr',                \&_renameTopic);
     Foswiki::Func::registerRESTHandler('topic_move',        \&_moveTopic);
     Foswiki::Func::registerRESTHandler('tm',                \&_moveTopic);
-    Foswiki::Func::registerRESTHandler('attachment_move',   \&_moveAttachment);
-    Foswiki::Func::registerRESTHandler('am',                \&_moveAttachment);
-    Foswiki::Func::registerRESTHandler('attachment_rename', \&_renameAttachment);
-    Foswiki::Func::registerRESTHandler('ar',                \&_renameAttachment);
     Foswiki::Func::registerRESTHandler('revision_list',     \&_listRevisions);
     Foswiki::Func::registerRESTHandler('rl',                \&_listRevisions);
     Foswiki::Func::registerRESTHandler('revision_compare',  \&_compareRevisions);
@@ -78,6 +75,20 @@ sub initPlugin {
     Foswiki::Func::registerRESTHandler('cg',                \&_getChildTopics);
     Foswiki::Func::registerRESTHandler('backlink_get',      \&_getBacklinks);
     Foswiki::Func::registerRESTHandler('bg',                \&_getBacklinks);
+    
+    # ********* ATTACHMENT **********
+    Foswiki::Func::registerRESTHandler('attachment_move',   \&_moveAttachment);
+    Foswiki::Func::registerRESTHandler('am',                \&_moveAttachment);
+    Foswiki::Func::registerRESTHandler('attachment_rename', \&_renameAttachment);
+    Foswiki::Func::registerRESTHandler('ar',                \&_renameAttachment);
+    Foswiki::Func::registerRESTHandler('attachment_replace',\&_replaceAttachment);
+    Foswiki::Func::registerRESTHandler('arepl',             \&_replaceAttachment);
+    Foswiki::Func::registerRESTHandler('attachment_add',    \&_addAttachment);
+    Foswiki::Func::registerRESTHandler('aadd',              \&_addAttachment);
+    Foswiki::Func::registerRESTHandler('attachment_versions',\&_versionsAttachment);
+    Foswiki::Func::registerRESTHandler('aver',              \&_versionsAttachment);    
+    
+    # ********* WEB **********
     Foswiki::Func::registerRESTHandler('web_rename',        \&_renameWeb);
     Foswiki::Func::registerRESTHandler('wr',                \&_renameWeb);
     Foswiki::Func::registerRESTHandler('web_move',          \&_moveWeb);
@@ -88,7 +99,11 @@ sub initPlugin {
     # request-a-UI-form ( template ) rest handlers
     Foswiki::Func::registerRESTHandler('trform',                \&_renameTopicForm);
     Foswiki::Func::registerRESTHandler('tmform',                \&_moveTopicForm);
-    Foswiki::Func::registerRESTHandler('loginform',                \&_loginForm);
+    Foswiki::Func::registerRESTHandler('loginform',             \&_loginForm);    
+    Foswiki::Func::registerRESTHandler('areplform',             \&_replaceAttachmentForm);
+    Foswiki::Func::registerRESTHandler('aaddform',              \&_addAttachmentForm);
+    Foswiki::Func::registerRESTHandler('averform',              \&_versionsAttachmentForm);
+    Foswiki::Func::registerRESTHandler('atablform',              \&_tableAttachmenstForm);
     return 1;
 }
 
@@ -231,6 +246,57 @@ sub _moveAttachment {
     use Foswiki::Plugins::UiByRestPlugin::AttachmentMove;
     return Foswiki::Plugins::UiByRestPlugin::AttachmentMove::do($session);
 }
+
+sub _replaceAttachment {
+    my $session       = shift;
+    use Foswiki::Plugins::UiByRestPlugin::AttachmentReplace;
+    return Foswiki::Plugins::UiByRestPlugin::AttachmentReplace::do($session);
+    
+}
+
+sub _replaceAttachment {    
+    my $session = shift;
+    use Foswiki::Plugins::UiByRestPlugin::AttachmentReplace;
+    return Foswiki::Plugins::UiByRestPlugin::AttachmentReplace::do( $session );
+}
+
+sub _replaceAttachmentForm {    
+    my $session = shift;
+    use Foswiki::Plugins::UiByRestPlugin::AttachmentReplace;
+    return Foswiki::Plugins::UiByRestPlugin::AttachmentReplace::template( $session );
+}
+
+sub _addAttachmentForm {
+    my $session = shift;
+    use Foswiki::Plugins::UiByRestPlugin::AttachmentAdd;
+    return Foswiki::Plugins::UiByRestPlugin::AttachmentAdd::template( $session );
+}
+
+sub _addAttachment {
+    my $session = shift;
+    use Foswiki::Plugins::UiByRestPlugin::AttachmentAdd;
+    return Foswiki::Plugins::UiByRestPlugin::AttachmentAdd::do( $session );
+}
+
+sub _versionsAttachment {    
+    my $session = shift;
+    use Foswiki::Plugins::UiByRestPlugin::AttachmentReplace;
+    return Foswiki::Plugins::UiByRestPlugin::AttachmentReplace::do( $session );
+}
+
+sub _versionsAttachmentForm {    
+    my $session = shift;
+    use Foswiki::Plugins::UiByRestPlugin::AttachmentVersions;
+    return Foswiki::Plugins::UiByRestPlugin::AttachmentVersions::template( $session );
+}
+
+sub _tableAttachmenstForm {    
+    my $session = shift;
+    use Foswiki::Plugins::UiByRestPlugin::AttachmentTable;
+    return Foswiki::Plugins::UiByRestPlugin::AttachmentTable::template( $session );
+}
+
+
 
 =begin TML
 
