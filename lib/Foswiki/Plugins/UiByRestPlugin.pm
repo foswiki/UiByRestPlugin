@@ -258,12 +258,6 @@ sub _replaceAttachment {
 
 }
 
-sub _replaceAttachment {
-    my $session = shift;
-    use Foswiki::Plugins::UiByRestPlugin::AttachmentReplace;
-    return Foswiki::Plugins::UiByRestPlugin::AttachmentReplace::do($session);
-}
-
 sub _replaceAttachmentForm {
     my $session = shift;
     use Foswiki::Plugins::UiByRestPlugin::AttachmentReplace;
